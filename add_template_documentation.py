@@ -12,7 +12,10 @@ TEMPLATE_NO_NEWLINE = TEMPLATE.replace("\n", "")
 # https://www.mediawiki.org/wiki/Manual:Namespace#Built-in_namespaces to see available namespaces
 NAMESPACE = 10
 # Number of pages to extract at a time; used in get_params() in params for "aplimit"
-PAGES_LIMIT = 3
+PAGES_LIMIT = 5
+
+# Text file bot will read and write last page title
+TEXT_FILE = "docBot_last_page.txt"
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -47,17 +50,18 @@ def get_params(continue_from="") -> {}:
 	}
 
 
-def modify_pages(url: str) -> None:
+def modify_pages(url: str, last_title: str) -> None:
 	"""
 	Retrieves a Page Generator with all old pages to be tagged
 
 	:param url: String of the path to the API URL of the wiki
+	:param last_title: String of the last title scanned
 	:return: None
 	"""
 
 	# Retrieving the JSON and extracting page titles
 	session = requests.Session()
-	request = session.get(url=url, params=get_params(), verify=False)
+	request = session.get(url=url, params=get_params(last_title), verify=False)
 	pages_json = request.json()
 	pages = pages_json["query"]["allpages"]
 	print("Pages to be scanned:", pages)
@@ -65,33 +69,20 @@ def modify_pages(url: str) -> None:
 	# Adds template to the page if needed
 	for page in pages:
 		curr_title = page["title"]
-		add_template(curr_title)
-
-	if "continue" in pages_json:
-		continue_from = pages_json["continue"]["apcontinue"]
-		print("\nContinuing from:", continue_from)
-	else:
-		continue_from = ""
-
-	# Continue iterating through wiki
-	while continue_from:
-		# Retrieving the JSON and extracting page titles
-		request = session.get(url=url, params=get_params(continue_from), verify=False)
-		pages_json = request.json()
-		pages = pages_json["query"]["allpages"]
-		print("Pages to be scanned:", pages)
-
-		# Adds template to the page if needed
-		for page in pages:
-			curr_title = page["title"]
+		if re.search('/doc$', curr_title):
+			print(curr_title, "is a doc subpage. Skipping...")
+		else:
 			add_template(curr_title)
 
-		# Extracting title to continue iterating from
-		if "continue" in pages_json:
-			continue_from = pages_json["continue"]["apcontinue"]
-			print("\nContinuing from:", continue_from)
-		else:
-			continue_from = ""
+	if "continue" in pages_json:
+		continue_from_title = pages_json["continue"]["apcontinue"]
+		print("\nContinuing from:", continue_from_title, "next run.")
+	else:
+		continue_from_title = ""
+
+	with open(TEXT_FILE, "w+") as f:
+		f.write(continue_from_title)
+		print("Wrote", continue_from_title, "in", TEXT_FILE)
 
 
 def has_template(page_text: str) -> bool:
@@ -121,7 +112,7 @@ def add_template(title: str) -> None:
 	page = pywikibot.Page(site, title)
 	page_text = page.text
 
-	if not(has_template(page_text)):
+	if not (has_template(page_text)):
 		print("'%s' not in '%s'... Adding" % (TEMPLATE_NO_NEWLINE, page))
 		page_text = u''.join((page_text, TEMPLATE))
 		page.text = page_text
@@ -139,7 +130,14 @@ def main() -> None:
 	url = get_api_url()
 	print(url)
 
-	modify_pages(url)
+	# Creates file if it does not exist
+	open(TEXT_FILE, "a")
+
+	with open(TEXT_FILE, "r") as f:
+		last_title = f.readline().strip()
+		print("Starting from:", last_title)
+
+	modify_pages(url, last_title)
 
 	print("\nNo pages left to be tagged")
 
