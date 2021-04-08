@@ -13,7 +13,6 @@ TEMPLATE_NO_NEWLINE = TEMPLATE.replace("\n", "")
 NAMESPACE = 10
 # Number of pages to extract at a time; used in get_params() in params for "aplimit"
 PAGES_LIMIT = 5
-
 # Text file bot will read and write last page title
 TEXT_FILE = "docBot_last_page.txt"
 
